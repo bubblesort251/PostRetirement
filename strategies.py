@@ -74,6 +74,7 @@ def wealth_s(age_0, returns, target, w_0, swr, inflation, n_asset, longevity, dy
     wplt = [w_0] # array of total portfolio wealth for each month
     avg_returns = [] # portfolio return for each month
     drawdown = [swr*w_0]
+
     
     for i in range(int(longevity - age_0)):
         drawdown.append(drawdown[i]*(1+inflation[i]))
@@ -101,6 +102,7 @@ def wealth_s(age_0, returns, target, w_0, swr, inflation, n_asset, longevity, dy
 
         w_t = w # wealth at start of month
 
+
         # if still alive
         if(y-1+age_0)<=longevity:
 
@@ -110,7 +112,10 @@ def wealth_s(age_0, returns, target, w_0, swr, inflation, n_asset, longevity, dy
                 amount = w*alloc
                 # grow returns from each asset for the month
                 for j in range(n_asset):
-                    amount[j] = amount[j]*(1+returns[i][j])
+                    if(j != 7):
+                        amount[j] = amount[j]*(1+returns[i][j])
+                    else:
+                        amount[j] = amount[j]*(returns[i][j])
 
                 w = np.sum(amount) # wealth for start of next month
                 wplt.append(w)
@@ -166,7 +171,7 @@ def wealth_path(age_0, scenarios, target, w_0, swr, inf_mat, n_asset, longevity,
 
 
 # same as wealth_s() but accounts for how the portfolio tracks with the goal portfolio
-def wealth_s_dzgp(age_0, returns, target, w_0, d, inflation, n_asset, longevity):
+def wealth_s_dzgp(age_0, returns, target, w_0, d, inflation, n_asset, longevity, goal_return):
     w=w_0
     y = 0 #counter for years
     wplt = [w_0] # array of total portfolio wealth for each month
@@ -181,11 +186,12 @@ def wealth_s_dzgp(age_0, returns, target, w_0, d, inflation, n_asset, longevity)
     # create goal portfolio
     goal=[w_0]
     for i in range(1, int(longevity - age_0)+1):
-        temp_w = (goal[i-1]-drawdown[i-1])*1.065 #withdraw and then grow remaining by 6.5% 
-        goal.append(temp w)
+        temp_w = (goal[i-1]-drawdown[i-1])*(1+goal_return) #withdraw and then grow remaining by the goal 
+        goal.append(temp_w)
 
     # set portfolio allocation
     alloc = target[0].copy()
+    #change target allocation to whatever
 
     # iterate through the time periods to rebalance each month
     for i in range(len(returns)):
@@ -199,14 +205,238 @@ def wealth_s_dzgp(age_0, returns, target, w_0, d, inflation, n_asset, longevity)
                 alloc = target[y].copy()
                 # if wealth is less than 90% of goal wealth, increase allocation to equity by 20% and decrease allocation to bonds by 20%
                 if wplt[i] < goal[y]*0.9:
-                    alloc[0] = np.minimum(alloc[0]+0.2 , 1)
-                    alloc[1] = 1-alloc[0]
+                    if(y+age_0 < 100):
+                        x = alloc[0] + alloc[1] + alloc[2] + alloc[6]
+                        if(x + .2 >= 1):
+                            equity_prop = 1
+                        else:
+                            equity_prop = x + .2
+                            mult_e = equity_prop/x
+                        bond_prop = 1- equity_prop
+                        mult_b = bond_prop/np.sum(alloc[3] + alloc[5])
+
+                        alloc[0] = alloc[0]*mult_e
+                        alloc[1] = alloc[1]*mult_e
+                        alloc[2] = alloc[2]*mult_e
+                        alloc[6] = alloc[6]*mult_e
+
+                        alloc[3] = alloc[3]*mult_b
+                        alloc[5] = alloc[5]*mult_b
                 # if wealth is greater than 110% of goal wealth, decrease allocation to equity by 20% and increase allocation to bonds by 20%
                 elif wplt[i] >= goal[y]*1.1:
-                    alloc[0] = np.maximum(alloc[0] - 0.2, 0)
-                    alloc[1] = 1-alloc[0]
+                    if(y+age_0 < 100):
+                        x = alloc[0] + alloc[1] + alloc[2] + alloc[6]
+                        if(x + .2 >= 1):
+                            equity_prop = 1
+                        else:
+                            equity_prop = x - .2
+                            mult_e = equity_prop/x
+                        bond_prop = 1- equity_prop
+                        mult_b = bond_prop/np.sum(alloc[3] + alloc[5])
+
+                        alloc[0] = alloc[0]*mult_e
+                        alloc[1] = alloc[1]*mult_e
+                        alloc[2] = alloc[2]*mult_e
+                        alloc[6] = alloc[6]*mult_e
+
+                        alloc[3] = alloc[3]*mult_b
+                        alloc[5] = alloc[5]*mult_b
             y +=1
             
+        w_t = w #wealth at start of month 
+        #print(’wealth at start of month: ’, w t)
+
+        # if still alive
+        if (y-1+age_0)<=longevity:
+            # if still have money in account
+            if w_t>0:
+                # rebalancing
+                amount = w*alloc
+                # grow returns from each asset for the month
+                for j in range(n_asset):
+                    if(j != 7):
+                        amount[j] = amount[j]*(1+returns[i][j])
+                    else:
+                        amount[j] = amount[j]*(returns[i][j])
+
+                w = np.sum(amount) # wealth for start of next month
+                wplt.append(w)
+                avg_returns.append((w - w_t) / w_t) # return for this month
+            
+            # if no money left in account
+            else:
+                wplt.append(w_t)
+                avg_returns.append(None)
+        # if dead , set wealth = None
+        else:
+            wplt.append(None)
+            avg_returns.append(None)
+
+    return(wplt,avg_returns,drawdown)
+
+# function for modeling the wealth of the DZGP strategy
+def wealth_path_dzgp(age_0, scenarios, target, w_0, d, inf_mat , n_asset , longevity, goal_return):
+    wealths = []
+    returns = [] # matrix of returns for each year under each scenario 
+    drawdowns = []
+    avg_returns = [] # list of the monthly average return across all scenarios
+
+
+    if isinstance(longevity , np.ndarray):
+        wealth_return = list(map(lambda i: wealth_s_dzgp(age_0, scenarios[i], target, w_0, d, inf_mat[i], n_asset, longevity[i], goal_return), range(len(scenarios))))
+
+    else:
+        wealth_return = list(map(lambda i: wealth_s_dzgp(age_0, scenarios[i], target, w_0, d, inf_mat[i], n_asset , longevity, goal_return), range(len(scenarios))))
+
+    for i in range(len(wealth_return)):
+        wealths.append(wealth_return[i][0])
+        returns.append(wealth_return[i][1])
+        drawdowns.append(wealth_return[i][2])
+
+    # calculate average return over scenarios only for returns that are not None
+    wealths = np.array(wealths)
+    returns = np.array(returns)
+    drawdowns = np.array(drawdowns)
+    for i in range(len(returns[0])):
+        boolArr = returns[:,i] != None
+        temp_returns = returns[boolArr,i]
+        if temp_returns.size != 0:
+            avg_returns.append(np.mean(temp_returns))
+    
+    return (wealths , avg_returns , drawdowns)
+
+
+
+# wealth s() for dynamic drawdown strategy
+def wealth_s_dd(age_0, returns, target, w_0, d, inflation, n_asset, longevity, goal_return, dynamic = True):
+    w=w_0
+    y = 0 #counter for years
+    wplt = [w_0] # array of total portfolio wealth for each month
+    avg_returns = [] # portfolio return for each month
+    w_out = [] # array of all the drawdowns
+    
+    # create drawdowns
+    swr_drawdown = [d*w_0]
+    for i in range(int(longevity - age_0)):
+        swr_drawdown.append(swr_drawdown[i]*(1+inflation[i]))
+    
+    # create goal portfolio
+    goal=[w_0]
+    for i in range(1, int(longevity - age_0)+1):
+        temp_w = (goal[i-1]-swr_drawdown[i-1])*(1+goal_return) #withdraw and then grow remaining by goal_return
+        goal.append(temp_w)
+    # set portfolio allocation
+
+    if dynamic:
+        alloc = target[0]
+    else:
+        alloc = target
+
+
+    # iterate through the time periods to rebalance each month
+    for i in range(len(returns)):
+        # calculate any yearly calculations (adding new cash−inflows/outflows)
+        # when it’s january, do...
+
+        if i%12 == 0:
+            # if still alive
+            if (y+age_0) <= longevity:
+                drawdown = swr_drawdown[y]
+                # if wealth is less than 90% of goal wealth, decrease drawdown by 10%
+                if wplt[i] < goal[y]*0.9:
+                    drawdown = swr_drawdown[y]*0.9
+
+                # if wealth is greater than 110% of goal wealth , increase drawdown by 20%
+                elif wplt[i] >= goal[y]*1.1:
+                    drawdown = swr_drawdown[y]*1.25
+
+                w_out.append(drawdown)
+                w -= drawdown # subtract amount being drawndown
+
+                # change target allocation for the next year
+                if dynamic:
+                    alloc = target[y]
+            
+            # update year counter
+            y += 1
+
+        w_t = w #wealth at start of month
+
+        # if still alive
+        if(y-1+age_0)<=longevity:
+
+            #if still have money in account
+            if w_t>0:
+                # rebalancing
+                amount = w*alloc
+                # grow returns from each asset for the month
+                for j in range(n_asset):
+                    if(j != 7):
+                        amount[j] = amount[j]*(1+returns[i][j])
+                    else:
+                        amount[j] = amount[j]*(returns[i][j])
+
+                w = np.sum(amount) # wealth for start of next month
+                wplt.append(w)
+                avg_returns.append((w-w_t) / w_t) # return for this month
+
+            # if no money left in account
+            else:
+                wplt.append(w_t)
+                avg_returns.append(None)
+
+        # if died , set wealth = None
+        else:
+            wplt.append(None)
+            avg_returns.append(None)
+
+    return(wplt, avg_returns, w_out)
+
+
+
+# function for modeling the wealth of the DZGP strategy
+def wealth_path_dd(age_0, scenarios, target, w_0, d, inf_mat, n_asset, longevity, goal_return):
+    wealths = []
+    returns = [] # matrix of returns for each year under each scenario 
+    drawdowns = []
+    avg_returns = [] # list of the monthly average return across all scenarios
+
+    if isinstance(longevity , np.ndarray):
+        wealth_return = list(map(lambda i: wealth_s_dd(age_0, scenarios[i], target, w_0, d, inf_mat[i], n_asset, longevity[i], goal_return), range(len(scenarios))))
+
+    else:
+        wealth_return = list(map(lambda i: wealth_s_dd(age_0, scenarios[i], target, w_0, d, inf_mat[i], n_asset, longevity, goal_return), range(len(scenarios))))
+
+    for i in range(len(wealth_return)):
+        wealths.append(wealth_return[i][0])
+        returns.append(wealth_return[i][1])
+        drawdowns.append(wealth_return[i][2])
+
+    # calculate average return over scenarios only for returns that are not None
+    wealths = np.array(wealths)
+    returns = np.array(returns)
+    drawdowns = np.array(drawdowns)
+    for i in range(len(returns[0])):
+        boolArr = returns[:,i] != None
+        temp_returns = returns[boolArr,i]
+        if temp_returns.size != 0:
+            avg_returns.append(np.mean(temp_returns))
+    
+    return (wealths , avg_returns , drawdowns)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

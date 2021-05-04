@@ -1,0 +1,19 @@
+\begin{table}[ht]
+\caption{Table of Financial Metrics Given a SWR of 4\% + .5 FM}
+\centering % used for centering table 
+\resizebox{\textwidth}{!}{\begin{tabular}{c c c c c}
+\hline\hline %inserts double horizontal lines
+& Tontine & SWR Conservative 4.0% & Dynamic Zone Glide Path & Dynamic Drawdown \\ [0.5ex]
+\hline % inserts single horizontal line
+Average Annual Withdrawal Amount Across 30 years & 96794.151 & 54308.659 & 54308.659 & 62787.007\\
+Withdrawal Rate & 0.097 & 0.04 & 0.04 & 0.04\\
+Average monthly RoR & 0.001 & 0.002 & 0.003 & 0.004\\
+Mean wealth after 30 years & 0.0 & -242916.546 & 311617.859 & 127820.66\\
+Volatility of wealth at death & 0.0 & 356935.562 & 644065.402 & 509744.865\\
+Probability of ruin in 30 years & 0.0 & 0.795 & 0.354 & 0.484\\
+Probability of ruin & 0.0 & 0.179 & 0.059 & 0.073\\
+Magnitude of ruin at 5th percentile & 0.0 & -399911.465 & -58468.989 & -132138.227\\[1ex]
+\hline %inserts single line
+\end{tabular}}
+\label{table:nonlin} % is used to refer this table in the text
+\end{table}
